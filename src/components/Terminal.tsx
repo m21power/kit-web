@@ -257,7 +257,7 @@ export const Terminal: React.FC<TerminalProps> = ({
           );
           addLine(
             "output",
-            "  · kit add <file> - Add file to staging",
+            "  · kit add <file> | kit add .   - Stage files for commit",
             "author"
           );
           addLine(
