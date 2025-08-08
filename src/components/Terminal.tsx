@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Braces, Terminal as TerminalIcon, Trash2 } from "lucide-react";
 import { FileSystemItem } from "../types";
 import { ApiService } from "../services/api";
+import { on } from "events";
 
 interface TerminalProps {
   username: string;
@@ -96,6 +97,8 @@ export const Terminal: React.FC<TerminalProps> = ({
       "log",
       "branch",
       "checkout",
+      "restore",
+      "reset",
     ];
     return [...baseCommands, ...kitCommands.map((cmd) => `kit ${cmd}`)];
   };
@@ -145,6 +148,8 @@ export const Terminal: React.FC<TerminalProps> = ({
         "log",
         "branch",
         "checkout",
+        "restore",
+        "reset",
       ];
       const matches = kitSubcommands.filter((cmd) => cmd.startsWith(lastPart));
       if (matches.length === 1) {
@@ -237,17 +242,55 @@ export const Terminal: React.FC<TerminalProps> = ({
           break;
 
         case "help":
-          addLine("output", "Available commands:");
-          addLine("output", "  clear          - Clear terminal");
-          addLine("output", "  pwd            - Show current directory");
-          addLine("output", "  ls             - List files");
-          addLine("output", "  kit init       - Initialize Kit repository");
-          addLine("output", "  kit add <file> - Add file to staging");
-          addLine("output", '  kit commit -m "message" - Commit changes');
-          addLine("output", "  kit status     - Show repository status");
-          addLine("output", "  kit log        - Show commit history");
-          addLine("output", "  kit branch     - List branches");
-          addLine("output", "  kit checkout <branch> - Switch branch");
+          addLine("output", "Available commands:", "commit");
+          addLine("output", "  · clear          - Clear terminal", "author");
+          addLine(
+            "output",
+            "  · pwd            - Show current directory",
+            "author"
+          );
+          addLine("output", "  · ls             - List files", "author");
+          addLine(
+            "output",
+            "  · kit init       - Initialize Kit repository",
+            "author"
+          );
+          addLine(
+            "output",
+            "  · kit add <file> - Add file to staging",
+            "author"
+          );
+          addLine(
+            "output",
+            '  · kit commit -m "message" - Commit changes',
+            "author"
+          );
+          addLine(
+            "output",
+            "  · kit status     - Show repository status",
+            "author"
+          );
+          addLine(
+            "output",
+            "  · kit log        - Show commit history",
+            "author"
+          );
+          addLine("output", "  · kit branch     - List branches", "author");
+          addLine(
+            "output",
+            "  · kit checkout <branch> - Switch branch",
+            "author"
+          );
+          addLine(
+            "output",
+            "  · kit restore <file> - Restore deleted file",
+            "author"
+          );
+          addLine(
+            "output",
+            "  · kit reset <hash>  - Reset to a specific commit",
+            "author"
+          );
           break;
 
         case "pwd":
@@ -364,7 +407,11 @@ export const Terminal: React.FC<TerminalProps> = ({
         const statusData = statusResponse.data;
         if (statusData) {
           if (statusData.deleted.length > 0) {
-            addLine("output", "Deleted files:", "deleted");
+            addLine(
+              "output",
+              "Deleted files detected. You can restore individual files using 'kit restore <file>' or restore all deleted files with 'kit restore'.",
+              "deleted"
+            );
             statusData.deleted.forEach((file) => {
               addLine("output", `  deleted: ${file}`, "deleted");
             });
@@ -426,61 +473,28 @@ export const Terminal: React.FC<TerminalProps> = ({
         if (args.length < 1) {
           const response = await ApiService.listBranches(username);
           if (response.success && response.data) {
-            addLine("output", "Branches:");
+            addLine(
+              "output",
+              "Branches: Use 'kit checkout <branch>' to switch"
+            );
             response.data.forEach((branch) => {
-              addLine("output", `  ${branch}`);
+              if (branch === currentBranch) {
+                addLine("output", `* ${branch}`, "commit");
+              } else {
+                addLine("output", `  ${branch}`);
+              }
             });
           } else {
             addLine("error", `Failed to list branches: ${response.error}`);
           }
         } else {
-          const action = args[0];
-          const branchName = args[1];
+          const branchName = args[0];
 
-          switch (action) {
-            case "create":
-              if (!branchName) {
-                addLine("error", "Usage: kit branch create <branch-name>");
-              } else {
-                const response = await ApiService.createBranch(
-                  username,
-                  branchName
-                );
-                if (response.success) {
-                  addLine("output", `Branch created: ${branchName}`);
-                } else {
-                  addLine(
-                    "error",
-                    `Failed to create branch: ${response.error}`
-                  );
-                }
-              }
-              break;
-
-            case "checkout":
-              if (!branchName) {
-                addLine("error", "Usage: kit branch checkout <branch-name>");
-              } else {
-                const response = await ApiService.checkoutBranch(
-                  username,
-                  branchName
-                );
-                if (response.success) {
-                  setCurrentBranch(branchName);
-                  addLine("output", `Switched to branch: ${branchName}`);
-                  // Optionally, update the file system view here
-                  // onFolderUpdate(response.data);
-                } else {
-                  addLine(
-                    "error",
-                    `Failed to switch branch: ${response.error}`
-                  );
-                }
-              }
-              break;
-
-            default:
-              addLine("error", `Unknown branch command: ${action}`);
+          const response = await ApiService.createBranch(username, branchName);
+          if (response.success) {
+            addLine("output", `Branch created: ${branchName}`);
+          } else {
+            addLine("error", `Failed to create branch: ${response.error}`);
           }
         }
         break;
@@ -498,13 +512,58 @@ export const Terminal: React.FC<TerminalProps> = ({
             setCurrentBranch(branchName);
             addLine("output", `Switched to branch: ${branchName}`);
             // Optionally, update the file system view here
-            // onFolderUpdate(response.data);
+            if (response.data) {
+              onFolderUpdate(response.data);
+            }
           } else {
             addLine("error", `Failed to switch branch: ${response.error}`);
           }
         }
         break;
+      case "restore":
+        if (!isKitInitialized) {
+          addLine("error", 'Not a Kit repository. Run "kit init" first.');
+          return;
+        }
 
+        const fileToRestore = [];
+        for (const arg of args) {
+          fileToRestore.push(arg);
+        }
+        const response = await ApiService.restoreFiles(username, fileToRestore);
+        if (!response.success) {
+          addLine("error", `Failed to restore files: ${response.error}`);
+        }
+        response.data?.files.forEach((file) => {
+          if (file.restored) {
+            addLine("output", `Restored file: ${file.path}`, "staged");
+          } else {
+            addLine("error", `Failed to restore file: ${file.path}`);
+          }
+        });
+        onReplaceFileSystem?.(response.data?.fileSystem || rootFolder);
+        break;
+      case "reset":
+        if (!isKitInitialized) {
+          addLine("error", 'Not a Kit repository. Run "kit init" first.');
+          return;
+        }
+        if (args.length < 1) {
+          addLine("error", "Usage: kit reset <commit-hash>");
+          return;
+        }
+        const commitHash = args[0];
+        const resetResponse = await ApiService.resetKit(username, commitHash);
+        if (resetResponse.success) {
+          addLine("output", `Reset to commit: ${commitHash}`);
+          // Optionally, update the file system view here
+          if (resetResponse.data) {
+            onReplaceFileSystem?.(resetResponse.data);
+          }
+        } else {
+          addLine("error", `Failed to reset: ${resetResponse.error}`);
+        }
+        break;
       default:
         addLine("error", `Unknown command: ${subCommand}`);
     }
@@ -514,26 +573,24 @@ export const Terminal: React.FC<TerminalProps> = ({
     <div className="h-full bg-[#1e1e1e] flex flex-col">
       {/* Terminal Header */}
       <div className="h-8 bg-[#2d2d30] border-b border-[#3c3c3c] flex items-center justify-between px-3">
-        <div className="terminal-title text-lg font-bold text-[#4ec9b0]">
-          Kit Terminal
+        <div className="flex items-center gap-4">
+          <span className="terminal-title text-lg font-bold text-[#4ec9b0]">
+            Terminal
+          </span>
+          <span className="text-sm text-[#dcdcaa] bg-[#232323] px-2 py-1 rounded">
+            <span className="font-semibold">{currentBranch}</span>
+          </span>
         </div>
         <div className="terminal-controls">
           <button
-            className="terminal-button"
+            className="terminal-button flex items-center gap-1 px-2 py-1 rounded hover:bg-[#232323] transition-colors text-[#f48771]"
+            title="Clear Terminal"
             onClick={() => {
-              // Handle new terminal tab
-            }}
-          >
-            <Braces />
-          </button>
-          <button
-            className="terminal-button"
-            onClick={() => {
-              // Handle clear terminal
               clearTerminal();
             }}
           >
-            <Trash2 />
+            <Trash2 size={16} />
+            <span className="hidden md:inline">Clear</span>
           </button>
         </div>
       </div>
@@ -585,12 +642,12 @@ export const Terminal: React.FC<TerminalProps> = ({
         )}
       </div>
       {/* Terminal Input */}
-      <div className="border-t border-[#3c3c3c] p-3">
+      <div className="border-t border-[#3c3c3c] p-3 flex items-center">
         <span className="terminal-prompt text-[#569cd6] font-semibold">{`${username}@kit:~$`}</span>
         <input
           ref={inputRef}
           type="text"
-          className="flex-1 bg-transparent text-white outline-none ml-2"
+          className="bg-transparent text-white outline-none ml-2 flex-1 w-full"
           value={currentInput}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}

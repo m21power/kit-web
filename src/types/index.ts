@@ -36,7 +36,14 @@ export interface KitLogEntry {
   author: string;
   date: string;
 }
-
+export interface RestoreFiles {
+  path: string;
+  restored: boolean;
+}
+export interface KitRestore {
+  files: RestoreFiles[];
+  fileSystem: FileSystemItem;
+}
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;

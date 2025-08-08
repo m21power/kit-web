@@ -4,6 +4,8 @@ import {
   KitStatus,
   KitLogEntry,
   KitAdd,
+  RestoreFiles,
+  KitRestore,
 } from "../types";
 import { db } from "./firebase";
 import {
@@ -49,6 +51,80 @@ export class ApiService {
     return {
       success: true,
       data: { waited: delayMs },
+    };
+  }
+  static async restoreFiles(
+    username: string,
+    paths: string[]
+  ): Promise<ApiResponse<KitRestore>> {
+    const response = await fetch(`${API_BASE_URL}/restore`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username, paths }),
+    });
+    if (!response.ok) {
+      return {
+        success: false,
+      };
+    }
+
+    const responseData = await response.json();
+    console.log("restoreFiles response data:", responseData);
+    const result = responseData.data?.result.restored || {};
+    const restoredFiles: RestoreFiles[] = Object.entries(result).map(
+      ([path, restored]) => ({
+        path,
+        restored: Boolean(restored),
+      })
+    );
+    function cleanPaths(item: FileSystemItem): FileSystemItem {
+      const prefixToRemove = `workspaces/${username}/`;
+      const removePrefix = (str?: string): string =>
+        str && str.startsWith(prefixToRemove)
+          ? str.slice(prefixToRemove.length)
+          : str || "";
+
+      return {
+        ...item,
+        id: removePrefix(item.id),
+        path: removePrefix(item.path),
+        children: item.children?.map(cleanPaths),
+      };
+    }
+
+    const cleaned = cleanPaths(responseData.data?.result.fileSystem);
+    const actualRoot = cleaned.children?.[0];
+    console.log("✅ Cleaned structure:");
+    function walkDir(item: FileSystemItem, indent: string = "") {
+      const icon = item.type === "folder" ? "📁" : "📄";
+      console.log(`${indent}${icon} ${item.name}`);
+
+      if (item.children) {
+        for (const child of item.children) {
+          walkDir(child, indent + "  ");
+        }
+      }
+    }
+
+    if (!actualRoot) {
+      return {
+        success: false,
+        error: "Invalid file system structure.",
+      };
+    }
+    walkDir(actualRoot);
+    for (const file of restoredFiles) {
+      console.error(`restored file: ${file.path}`);
+    }
+
+    return {
+      success: true,
+      data: {
+        files: restoredFiles,
+        fileSystem: actualRoot,
+      },
     };
   }
   static async initRepository(
@@ -127,6 +203,47 @@ export class ApiService {
     return {
       success: true,
       data: `[main ${hash}] ${message}`,
+    };
+  }
+  static async resetKit(
+    username: string,
+    hash: string
+  ): Promise<ApiResponse<FileSystemItem>> {
+    const response = await fetch(`${API_BASE_URL}/reset`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username, hash }),
+    });
+    const responseData = await response.json();
+    function cleanPaths(item: FileSystemItem): FileSystemItem {
+      const prefixToRemove = `workspaces/${username}/`;
+      const removePrefix = (str?: string): string =>
+        str && str.startsWith(prefixToRemove)
+          ? str.slice(prefixToRemove.length)
+          : str || "";
+
+      return {
+        ...item,
+        id: removePrefix(item.id),
+        path: removePrefix(item.path),
+        children: item.children?.map(cleanPaths),
+      };
+    }
+
+    const cleaned = cleanPaths(responseData.data.data);
+    const actualRoot = cleaned.children?.[0];
+    if (!response.ok) {
+      return {
+        success: false,
+        error: responseData.error || "Failed to reset repository",
+      };
+    }
+
+    return {
+      success: true,
+      data: actualRoot,
     };
   }
 
