@@ -6,7 +6,8 @@ Kit Playground is a VS Code-inspired web application for exploring version contr
 
 - **VS Code-like UI**: File explorer, code editor, and integrated terminal.
 - **Custom Version Control**: Use Kit commands (`kit init`, `kit add`, `kit commit`, etc.) in the terminal.
-- **Branching & History**: Create branches, view commit logs, and switch branches.
+- **Branching & History**: Create, delete, rename, and switch branches. View commit logs and reset to specific commits.
+- **File Restore**: Restore deleted files using `kit restore <file>`.
 - **Firebase Integration**: Store ratings and feedback.
 - **User Workspaces**: Each user gets a unique workspace.
 - **Rating & Feedback**: Rate your experience and send feedback directly from the app.
@@ -100,8 +101,10 @@ public/
 - `kit commit -m "message"` - Commit changes
 - `kit status` - Show repository status
 - `kit log` - Show commit history
-- `kit branch` - List/create branches
+- `kit branch` - List/create/delete/rename branches
 - `kit checkout <branch>` - Switch branch
+- `kit restore <file>` - Restore deleted file
+- `kit reset <hash>` - Reset to a specific commit
 
 ## Feedback & Rating
 
