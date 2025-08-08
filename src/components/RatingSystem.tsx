@@ -87,7 +87,7 @@ export const RatingSystem: React.FC<RatingSystemProps> = ({ username }) => {
       <div className="flex items-center space-x-4">
         <div className="flex items-center space-x-1">
           <span className="text-sm text-[#cccccc] mr-3 font-medium">
-            Rate this workspace:
+            Rate My Work 🥹:
           </span>
           <div className="flex items-center">{renderStars()}</div>
         </div>
