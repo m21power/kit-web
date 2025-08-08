@@ -1,7 +1,7 @@
 export interface FileSystemItem {
   id: string;
   name: string;
-  type: 'file' | 'folder';
+  type: "file" | "folder";
   content?: string;
   children?: FileSystemItem[];
   path: string;
@@ -19,9 +19,15 @@ export interface KitCommand {
 
 export interface KitStatus {
   branch: string;
+  deleted: string[];
   staged: string[];
   modified: string[];
   untracked: string[];
+}
+
+export interface KitAdd {
+  message: string;
+  files: string[];
 }
 
 export interface KitLogEntry {

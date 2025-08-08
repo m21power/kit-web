@@ -1,4 +1,10 @@
-import { ApiResponse, FileSystemItem, KitStatus, KitLogEntry } from "../types";
+import {
+  ApiResponse,
+  FileSystemItem,
+  KitStatus,
+  KitLogEntry,
+  KitAdd,
+} from "../types";
 import { db } from "./firebase";
 import {
   doc,
@@ -73,7 +79,7 @@ export class ApiService {
     username: string,
     files: string[],
     rootFolder: FileSystemItem
-  ): Promise<ApiResponse<FileSystemItem>> {
+  ): Promise<ApiResponse<KitAdd>> {
     const response = await fetch(`${API_BASE_URL}/add`, {
       method: "POST",
       headers: {
@@ -84,12 +90,17 @@ export class ApiService {
     if (!response.ok) {
       return {
         success: false,
-        data: rootFolder,
+        data: { files: [], message: "Failed to add files" },
       };
     }
+    const responseData = await response.json();
+    console.log("addFiles response data:", responseData);
     return {
-      success: true,
-      data: rootFolder,
+      success: responseData.success,
+      data: {
+        files: responseData.data.staged || [],
+        message: responseData.data.message || "",
+      },
     };
   }
 
@@ -130,28 +141,64 @@ export class ApiService {
       },
       body: JSON.stringify({ username, rootFolder }),
     });
+
     const responseBody = await response.clone().json();
     console.log("getStatus response body:", responseBody);
     console.log("getStatus response status:", response.status);
+
     if (!response.ok) {
       return {
         success: false,
         data: {
-          branch: "main",
-          staged: ["src/main.ts"],
-          modified: ["README.md"],
-          untracked: ["temp.txt"],
+          deleted: [],
+          branch: "<branch>",
+          staged: [],
+          modified: [],
+          untracked: [],
         },
       };
     }
-    const data = await response.json();
+
+    const responsedata = await response.json();
+    const data = responsedata.data;
+
+    const staged: string[] = [];
+    const modified: string[] = [];
+    const deleted: string[] = [];
+    const untracked: string[] = [];
+
+    if (Array.isArray(data.staged)) {
+      for (const item of data.staged) {
+        if (item.status === "staged") {
+          staged.push(item.path);
+        } else if (item.status === "modified") {
+          modified.push(item.path);
+        } else if (item.status === "deleted (staged)") {
+          deleted.push(item.path);
+        }
+      }
+    }
+
+    if (Array.isArray(data.unstaged)) {
+      for (const item of data.unstaged) {
+        if (item.status === "created") {
+          untracked.push(item.path);
+        } else if (item.status === "modified") {
+          modified.push(item.path);
+        } else if (item.status === "deleted") {
+          deleted.push(item.path);
+        }
+      }
+    }
+
     return {
       success: true,
       data: {
         branch: data.branch,
-        staged: data.staged || [],
-        modified: data.modified || [],
-        untracked: data.untracked || [],
+        staged,
+        modified,
+        deleted,
+        untracked,
       },
     };
   }
